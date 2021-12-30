@@ -16,6 +16,7 @@ table! {
         name -> Varchar,
         email -> Varchar,
         password -> Varchar,
+        password_salt -> Nullable<Varchar>,
         avatar_url -> Nullable<Varchar>,
         created_at -> Datetime,
         updated_at -> Nullable<Datetime>,

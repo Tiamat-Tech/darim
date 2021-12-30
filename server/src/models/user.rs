@@ -15,6 +15,7 @@ pub struct User {
     pub name: String,
     pub email: String,
     pub password: String,
+    pub password_salt: Option<String>,
     pub avatar_url: Option<String>,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
@@ -40,6 +41,7 @@ struct UserDAO {
     name: Option<String>,
     email: Option<String>,
     password: Option<String>,
+    password_salt: Option<String>,
     avatar_url: Option<String>,
     updated_at: Option<NaiveDateTime>,
 }
@@ -116,14 +118,17 @@ impl UserRepository {
     }
 
     /// Finds a password of the user specified by email.
-    pub fn find_password_by_email(&self, email: &str) -> Result<String, ServiceError> {
-        let password: Result<String, Error> = dsl::users
-            .select(dsl::password)
+    pub fn find_password_by_email(
+        &self,
+        email: &str,
+    ) -> Result<(String, Option<String>), ServiceError> {
+        let password_pair: Result<(String, Option<String>), Error> = dsl::users
+            .select((dsl::password, dsl::password_salt))
             .filter(dsl::email.eq(email))
-            .get_result::<String>(&self.conn);
+            .get_result::<(String, Option<String>)>(&self.conn);
 
-        match password {
-            Ok(password) => Ok(password),
+        match password_pair {
+            Ok((password, password_salt)) => Ok((password, password_salt)),
             Err(error) => match error {
                 Error::NotFound => {
                     Err(get_service_error(ServiceError::NotFound(email.to_string())))
@@ -149,6 +154,7 @@ impl UserRepository {
         name: &str,
         email: &str,
         password: &str,
+        password_salt: &str,
         avatar_url: &Option<String>,
     ) -> Result<bool, ServiceError> {
         let user_to_create = UserDAO {
@@ -156,6 +162,7 @@ impl UserRepository {
             name: Some(name.to_string()),
             email: Some(email.to_string()),
             password: Some(password.to_string()),
+            password_salt: Some(password_salt.to_string()),
             avatar_url: avatar_url.clone(),
             updated_at: None,
         };
@@ -181,6 +188,7 @@ impl UserRepository {
         id: u64,
         name: &Option<String>,
         password: &Option<String>,
+        password_salt: &Option<String>,
         avatar_url: &Option<String>,
     ) -> Result<bool, ServiceError> {
         let user_to_update = UserDAO {
@@ -188,6 +196,7 @@ impl UserRepository {
             name: name.clone(),
             email: None,
             password: password.clone(),
+            password_salt: password_salt.clone(),
             avatar_url: avatar_url.clone(),
             updated_at: Some(Utc::now().naive_utc()),
         };

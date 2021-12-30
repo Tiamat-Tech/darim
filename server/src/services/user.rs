@@ -4,8 +4,8 @@ use crate::models::auth::*;
 use crate::models::error::{get_service_error, ServiceError};
 use crate::models::user::*;
 use crate::models::user_key::UserKeyRepository;
+use crate::utils::argon2_password_util;
 use crate::utils::env_util::RECAPTCHA_SECRET_KEY;
-use crate::utils::password_util;
 
 pub struct UserService {
     sign_up_token_repository: Option<SignUpTokenRepository>,
@@ -195,6 +195,7 @@ impl UserService {
                             &token.name,
                             &token.email,
                             &token.password,
+                            &token.password_salt,
                             &token.avatar_url,
                         )?;
 
@@ -238,16 +239,28 @@ impl UserService {
             }
         }
 
-        let hashed_password = if let Some(password) = password {
-            Some(password_util::get_hashed_password(&password))
+        let (hashed_password, password_salt) = if let Some(password) = password {
+            let password_salt: String = argon2_password_util::generate_password_salt();
+            (
+                Some(argon2_password_util::hash_password(
+                    &password,
+                    &password_salt,
+                )),
+                Some(password_salt),
+            )
         } else {
-            None
+            (None, None)
         };
 
         let fallback_repository =
             some_if_true!(self.user_repository.is_none() => UserRepository::new());
-        self.user_repository(fallback_repository)
-            .update(id, name, &hashed_password, avatar_url)
+        self.user_repository(fallback_repository).update(
+            id,
+            name,
+            &hashed_password,
+            &password_salt,
+            avatar_url,
+        )
     }
 
     // Reset the password.
@@ -275,9 +288,15 @@ impl UserService {
         };
 
         if token.id == token_id && token.password == temporary_password {
-            let hashed_password = password_util::get_hashed_password(new_password);
-            self.user_repository(None)
-                .update(user.id, &None, &Some(hashed_password), &None)?;
+            let password_salt: String = argon2_password_util::generate_password_salt();
+            let hashed_password = argon2_password_util::hash_password(new_password, &password_salt);
+            self.user_repository(None).update(
+                user.id,
+                &None,
+                &Some(hashed_password),
+                &Some(password_salt),
+                &None,
+            )?;
             self.password_token_repository(None).delete()
         } else {
             Err(get_service_error(ServiceError::UserNotFound(

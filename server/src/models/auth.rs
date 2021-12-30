@@ -26,6 +26,7 @@ pub struct SignUpToken {
     pub name: String,
     pub email: String,
     pub password: String,
+    pub password_salt: String,
     pub avatar_url: Option<String>,
 }
 
